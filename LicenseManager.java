@@ -1,13 +1,70 @@
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.security.*;
+import java.security.spec.*;
 
 public class LicenseManager {
     public LicenseManager() {
-
+        System.out.println("LicenseManager service started...");
     }
 
-    public byte[] decryptRSA() {
-        return null;
+    public void runManager(byte[] encrypted) {
+
+        System.out.println("Server -- " + "Server is being requested...");
+
+        System.out.println("Server -- " + "");
+    }
+
+    public byte[] encryptRSA(byte[] data) {
+        byte[] encrypted = new byte[0];
+
+        File publicFile = new File("public.key");
+
+        try {
+            // Key generation
+            byte[] publicKeyBytes = Files.readAllBytes(publicFile.toPath());
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(publicKeyBytes);
+            PublicKey publicKey = keyFactory.generatePublic(publicKeySpec);
+
+            // Encryption
+            Cipher cipher = Cipher.getInstance("RSA");
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+            encrypted = cipher.doFinal(data);
+
+        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException |
+                 NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException |
+                 BadPaddingException e) {
+            e.printStackTrace();
+        }
+
+        return encrypted;
+    }
+
+    public byte[] decryptRSA(byte[] data) {
+        byte[] decrypted = new byte[0];
+
+        try {
+            PrivateKey privateKey = readPrivateKey();
+
+            // Decryption
+            Cipher cipher = Cipher.getInstance("RSA");
+            cipher.init(Cipher.DECRYPT_MODE, privateKey);
+            decrypted = cipher.doFinal(data);
+
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException |
+                 BadPaddingException e) {
+            e.printStackTrace();
+        } catch (IllegalBlockSizeException e) {
+            throw new RuntimeException(e);
+        }
+
+        return decrypted;
     }
 
     public String MD5(String input) {
@@ -38,7 +95,42 @@ public class LicenseManager {
         return sb.toString();
     }
 
-    public String signHash() {
-        return null;
+    public byte[] getSignature(byte[] data) {
+        byte[] digitalSignature = new byte[0];
+
+        try {
+            Signature signature = Signature.getInstance("SHA256WithRSA");
+            SecureRandom secureRandom = new SecureRandom();
+            PrivateKey privateKey = readPrivateKey();
+
+            signature.initSign(privateKey, secureRandom);
+            signature.update(data);
+            digitalSignature = signature.sign();
+
+        } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException e) {
+            e.printStackTrace();
+        }
+
+        return digitalSignature;
+    }
+
+    public PrivateKey readPrivateKey() {
+        PrivateKey privateKey = null;
+
+        File privateFile = new File("private.key");
+
+        try {
+            // Key generation
+            byte[] privateKeyBytes = Files.readAllBytes(privateFile.toPath());
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
+            privateKey = keyFactory.generatePrivate(privateKeySpec);
+
+        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            e.printStackTrace();
+        }
+        return privateKey;
     }
 }
+
+

@@ -1,13 +1,41 @@
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
 import java.security.*;
-
-// TODO: Görev dağılımını todo'lar ile yaptım, oradan bakarak yapabilirsin.
+import java.security.spec.EncodedKeySpec;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 
 /*
 
     Run the program as "java Client.java from console if you are using Linux
 
+*/
+
+/**
+
+    Signature Implementation Steps
+-------------------------------------------------------------------------
+    (Client)
+    1- Get user info as string
+    2- Encrypt the string with public key
+
+    (Manager)
+    3- Receive the encrypted package and decrypt it
+    4- Create hash of the plaintext
+    5- Sign the hash with private key (Use Signature class)
+
+    (Client)
+    6- Receive the signed package
+    7- Verify the signature by hashing the plaintext again on client side
+    (You should use public key for verification. That's the tricky part)
+
+    8- Show a message prompt for result of the signing process
+    9- Create a "license.txt" file
 */
 
 public class Client {
@@ -17,6 +45,7 @@ public class Client {
 
     public static void main(String[] args) {
         Client client = new Client();
+        LicenseManager manager = new LicenseManager();
 
         // retrieve network interface's MAC address
 //        String mac = client.getMAC();
@@ -29,6 +58,27 @@ public class Client {
         // Retrieve motherboard's serial number
 //        String MBSN = client.getMotherboardSN();
 //        System.out.println("MBSN = " + MBSN);
+
+    }
+
+    public void runApplication() {
+        System.out.println("Client started...");
+
+        System.out.println("My MAC: " + getMAC());
+        System.out.println("My Disk ID: " + getDiskSN());
+        System.out.println("My Motherboard ID: " + getMotherboardSN());
+
+        LicenseManager licenseManager = new LicenseManager();
+
+        System.out.println("Client -- " + (isLicenseExistent() ? "License file found" : "License file is not found"));
+        String info = getAllInfo();
+        System.out.println("Client -- " + "Raw License Text: " + info);
+
+        byte[] encrypted = encryptRSA(info.getBytes());
+        System.out.println("Client -- " + "Encrypted License Text: " + new String(encrypted));
+
+        String hashed = MD5(info);
+        System.out.println("Client -- " + "MD5 License Text: " + hashed);
 
     }
 
@@ -67,7 +117,6 @@ public class Client {
             String cmd = ""; // Calling exec with a string parameter is deprecated
             if (OS.contains("linux")) { // Linux
                 cmd = "sudo dmidecode -s baseboard-serial-number";
-//                cmd = "pwd";
             } else if (OS.contains("win")) { // Windows
                 cmd = "wmic baseboard get serialnumber";
             } else {
@@ -128,10 +177,23 @@ public class Client {
         return false;
     }
 
-    public byte[] encryptRSA() { // TODO Buğrahan's part
-        StringBuilder sb = new StringBuilder();
+    public byte[] encryptRSA(byte[] data) {
+        byte[] encrypted = new byte[0];
 
-        return null;
+        try {
+            PublicKey publicKey = readPublicKey();
+
+            // Encryption
+            Cipher cipher = Cipher.getInstance("RSA");
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+            encrypted = cipher.doFinal(data);
+
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException |
+                 IllegalBlockSizeException | BadPaddingException e) {
+            e.printStackTrace();
+        }
+
+        return encrypted;
     }
 
     public String MD5(String input) {
@@ -148,5 +210,73 @@ public class Client {
         return hash;
     }
 
+    public PublicKey readPublicKey() {
+        PublicKey publicKey = null;
 
+        File publicFile = new File("public.key");
+
+        try {
+            // Key generation
+            byte[] publicKeyBytes = Files.readAllBytes(publicFile.toPath());
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(publicKeyBytes);
+            publicKey = keyFactory.generatePublic(publicKeySpec);
+
+        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            e.printStackTrace();
+        }
+        return publicKey;
+    }
+
+    public boolean verifySignature(byte[] data, byte[] digitalSignature) {
+        boolean isValid = false;
+
+        try {
+            Signature signature = Signature.getInstance("SHA256WithRSA");
+            PublicKey publicKey = readPublicKey();
+            signature.initVerify(publicKey);
+
+            signature.update(data);
+            isValid = signature.verify(digitalSignature);
+
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (InvalidKeyException | SignatureException e) {
+            throw new RuntimeException(e);
+        }
+
+        return isValid;
+    }
+
+    // TODO: Two functions below might be redundant
+    public static byte[] readFile(String path) {
+        byte[] buf = new byte[0];
+        try {
+            BufferedInputStream stream = new BufferedInputStream(new FileInputStream(path));
+
+            int byteCount = stream.available();
+            buf = new byte[byteCount];
+
+            int i = stream.read(buf);
+
+            for (byte d : buf) {
+                System.out.println((char) d + ":" + d);
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return buf;
+    }
+
+    public static void writeFile(byte[] data, String path) {
+        try(OutputStream os = new FileOutputStream(path)){
+            for (byte b : data) {
+                os.write(b);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 }
