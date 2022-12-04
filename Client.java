@@ -3,12 +3,15 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import java.io.*;
+import java.lang.reflect.Array;
 import java.net.*;
 import java.nio.file.Files;
 import java.security.*;
 import java.security.spec.EncodedKeySpec;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 /*
 
@@ -39,29 +42,44 @@ import java.security.spec.X509EncodedKeySpec;
 */
 
 public class Client {
+	
+	static String username = "user";
+	static String userSerialNumber = "user123";
+	static String mac = "F0:2F:74:15:F1:CD";
+	static String DSN;
+	static String MBSN = "201075710502043";
+	
+	
     public Client() {
 
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException, InterruptedException {
         Client client = new Client();
-        LicenseManager manager = new LicenseManager();
+        
+        System.out.println("Client started...");
 
-        // retrieve network interface's MAC address
-//        String mac = client.getMAC();
-//        System.out.println("mac = " + mac);
+        System.out.println("My MAC: " + mac);
+        System.out.println("My Disk ID: " + client.getDiskSN());
+        System.out.println("My Motherboard ID: " + MBSN);
 
-         // Retrieve disk serial number
-//        String DSN = client.getDiskSN();
-//        System.out.println("DSN = " + DSN);
+        LicenseManager licenseManager = new LicenseManager();
 
-        // Retrieve motherboard's serial number
-//        String MBSN = client.getMotherboardSN();
-//        System.out.println("MBSN = " + MBSN);
+        System.out.println("Client -- " + (client.isLicenseExistent() ? "License file found" : "License file is not found"));
+        String info = client.getAllInfo();
+        System.out.println("Client -- " + "Raw License Text: " + info);
+
+        byte[] encrypted = client.encryptRSA(info.getBytes());
+        System.out.println("Client -- " + "Encrypted License Text: " + new String(encrypted));
+
+        System.out.println();
+        String hashed = client.MD5(info);
+        System.out.println("Client -- " + "MD5 License Text: " + hashed);
+        
 
     }
 
-    public void runApplication() {
+    public void runApplication() throws IOException, InterruptedException {
         System.out.println("Client started...");
 
         System.out.println("My MAC: " + getMAC());
@@ -82,14 +100,16 @@ public class Client {
 
     }
 
-    public String getMAC() {
+    public String getMAC() throws SocketException {
         String macHex = "";
+        System.out.println();
+        
         try {
             InetAddress ip = Inet4Address.getLocalHost(); // Get device ip
             NetworkInterface device = NetworkInterface.getByInetAddress(ip); // Get network interface name
-
+            System.out.println(ip);
+            System.out.println(device);
             byte[] mac = device.getHardwareAddress(); // Get mac address as a byte array
-
             macHex = bytesToHex(mac, ":");
 
         } catch (UnknownHostException | SocketException e) {
@@ -100,9 +120,53 @@ public class Client {
         return macHex;
     }
 
-    public String getDiskSN() { // TODO: Barış's part
+    public String getDiskSN() throws IOException, InterruptedException { // TODO: Barış's part DONE
         // Get the disk serial number of the device
-        return null;
+    	String disk_sn = null;
+    	
+		String OS = System.getProperty("os.name").toLowerCase();
+		if (OS.contains("linux")) {
+		    String sc = "/sbin/udevadm info --query=property --name=sda"; // get HDD parameters as non root user
+		    String[] scargs = {"/bin/sh", "-c", sc};
+
+		    Process p = Runtime.getRuntime().exec(scargs);
+		    p.waitFor();
+
+		    BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream())); 
+		    String line;
+		    StringBuilder sb  = new StringBuilder();
+
+		    while ((line = reader.readLine()) != null) {
+		        if (line.indexOf("ID_SERIAL_SHORT") != -1) { // look for ID_SERIAL_SHORT or ID_SERIAL
+		            sb.append(line);
+		        }    
+		    }
+		    disk_sn = sb.toString().substring(sb.toString().indexOf("=") + 1);
+		    return disk_sn;
+		}
+		else if (OS.contains("win")) {
+			String sc = "cmd /c" + "wmic diskdrive get serialnumber";
+
+		    Process p = Runtime.getRuntime().exec(sc);
+		    p.waitFor();
+
+		    BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+
+		    String line;
+		    StringBuilder sb = new StringBuilder();
+
+		    while ((line = reader.readLine()) != null) {
+		        sb.append(line);
+		    } 
+
+		    disk_sn =  sb.substring(sb.toString().lastIndexOf("r") + 1).trim();
+		    return disk_sn;
+		}
+    	
+		else {
+			System.out.println("The program is incompatible with your operating system");
+		}
+		return disk_sn;
     }
 
     public String getMotherboardSN() { // Note: This function asks for sudo password
@@ -152,7 +216,13 @@ public class Client {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < input.length; i++) { // Parse bytes to hex string
             String hex = Integer.toHexString(input[i]);
-            hex = hex.substring(hex.length() - 2); // Get last two characters (for 2's complement bytes)
+            if (hex.length() < 2) {
+            	hex = "0"+hex;
+            }
+            else {
+                hex = hex.substring(hex.length() - 2); // Get last two characters (for 2's complement bytes)
+            }
+
             sb.append(hex);
 
             if (i < input.length - 1) {
@@ -164,17 +234,23 @@ public class Client {
 
     // Returns all the info with "$" as separator
     public String getAllInfo() {
-        return null;
+        return username+"$"+userSerialNumber+"$"+mac+"$"+DSN+"$"+MBSN;
     }
-
-    public String getUsernameSerial() { // TODO: Barış's part
-        // Return the username and the serial number (from the file or by use input)
-        return null;
+    
+    
+    /*
+    public String getUsernameSerial() { // TODO: Barış's part DONE
+        return username+"$"+userSerialNumber;
     }
+    */
 
     public boolean isLicenseExistent() { // TODO: Barış's part
-        // Check if a file named "license.txt" does exist on current directory
-        return false;
+    	File f = new File("license.txt");
+    	if(f.exists() && !f.isDirectory()) { 
+    	    return true;
+    	}
+		return false;
+
     }
 
     public byte[] encryptRSA(byte[] data) {
