@@ -9,6 +9,11 @@ import java.security.*;
 import java.security.spec.*;
 
 public class LicenseManager {
+	
+	byte[] decrypted;
+	String hashed;
+	byte[] signature;
+	
     public LicenseManager() {
         System.out.println("LicenseManager service started...");
     }
@@ -17,7 +22,21 @@ public class LicenseManager {
 
         System.out.println("Server -- " + "Server is being requested...");
 
-        System.out.println("Server -- " + "");
+        System.out.println("Server -- " + "Incoming Encrypted Text: " + new String(encrypted));
+        
+        decrypted = decryptRSA(encrypted);
+        String decryptedText = new String(decrypted);
+        System.out.println("Server -- " + "Decrypted Text: " + decryptedText);
+        
+        hashed = MD5(decryptedText);
+        System.out.println("Server -- " + "MD5 Plain License Text: " + hashed);
+        
+        signature = getSignature(hashed.getBytes());
+        String signatureText = new String(signature);
+        System.out.println("Server -- " + "Digital Signature: " + signatureText);
+        
+        
+        
     }
 
     public byte[] encryptRSA(byte[] data) {
@@ -85,7 +104,13 @@ public class LicenseManager {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < input.length; i++) { // Parse bytes to hex string
             String hex = Integer.toHexString(input[i]);
-            hex = hex.substring(hex.length() - 2); // Get last two characters (for 2's complement bytes)
+            if (hex.length() < 2) {
+            	hex = "0"+hex;
+            }
+            else {
+                hex = hex.substring(hex.length() - 2); // Get last two characters (for 2's complement bytes)
+            }
+
             sb.append(hex);
 
             if (i < input.length - 1) {
@@ -131,6 +156,9 @@ public class LicenseManager {
         }
         return privateKey;
     }
+    
+
+    
 }
 
 

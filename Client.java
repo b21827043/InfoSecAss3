@@ -3,15 +3,13 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import java.io.*;
-import java.lang.reflect.Array;
 import java.net.*;
 import java.nio.file.Files;
 import java.security.*;
 import java.security.spec.EncodedKeySpec;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.ArrayList;
-import java.util.Arrays;
+
 
 /*
 
@@ -43,60 +41,68 @@ import java.util.Arrays;
 
 public class Client {
 	
-	static String username = "user";
-	static String userSerialNumber = "user123";
+	static String username = "abt";
+	static String userSerialNumber = "1234-5678-9012";
 	static String mac = "F0:2F:74:15:F1:CD";
-	static String DSN;
+	static String DSN = "-455469999";
 	static String MBSN = "201075710502043";
 	
 	
     public Client() {
-
+    	System.out.println("Client started...");
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
+    	
         Client client = new Client();
         
-        System.out.println("Client started...");
-
-        System.out.println("My MAC: " + mac);
+        System.out.println("My MAC: " + client.getMAC());
         System.out.println("My Disk ID: " + client.getDiskSN());
-        System.out.println("My Motherboard ID: " + MBSN);
+        System.out.println("My Motherboard ID: " + client.getMotherboardSN());
 
         LicenseManager licenseManager = new LicenseManager();
-
+        
         System.out.println("Client -- " + (client.isLicenseExistent() ? "License file found" : "License file is not found"));
-        String info = client.getAllInfo();
+        
+    	String info = client.getAllInfo();
         System.out.println("Client -- " + "Raw License Text: " + info);
 
         byte[] encrypted = client.encryptRSA(info.getBytes());
         System.out.println("Client -- " + "Encrypted License Text: " + new String(encrypted));
 
-        System.out.println();
         String hashed = client.MD5(info);
         System.out.println("Client -- " + "MD5 License Text: " + hashed);
         
+        if (client.isLicenseExistent()) {
+            byte[] license = client.readFile("license.txt");
+            boolean isValid = client.verifySignature(hashed.getBytes(),license);
+            if (isValid) {
+            	System.out.println("Client -- Succeed. The license is correct.");
+            }
+            else {
+            	System.out.println("Client -- The license file has been broken!!");
+            }
+        	
+        }
+        
+        else {
+            licenseManager.runManager(encrypted);
+            
+            System.out.println("Client -- " + (client.isLicenseExistent() ? "License file found" : "License file is not found"));
+            
+            boolean isValid = client.verifySignature(licenseManager.hashed.getBytes(),licenseManager.signature);
+            if (isValid) {
+            	System.out.println("Client -- Succeed. The license file content is secured and signed by the server.");
+            	client.writeFile(licenseManager.signature, "license.txt");
+            }
+            else {
+            	System.out.println("Client -- The license file has been broken!!");
+            }
+        }
 
     }
 
     public void runApplication() throws IOException, InterruptedException {
-        System.out.println("Client started...");
-
-        System.out.println("My MAC: " + getMAC());
-        System.out.println("My Disk ID: " + getDiskSN());
-        System.out.println("My Motherboard ID: " + getMotherboardSN());
-
-        LicenseManager licenseManager = new LicenseManager();
-
-        System.out.println("Client -- " + (isLicenseExistent() ? "License file found" : "License file is not found"));
-        String info = getAllInfo();
-        System.out.println("Client -- " + "Raw License Text: " + info);
-
-        byte[] encrypted = encryptRSA(info.getBytes());
-        System.out.println("Client -- " + "Encrypted License Text: " + new String(encrypted));
-
-        String hashed = MD5(info);
-        System.out.println("Client -- " + "MD5 License Text: " + hashed);
 
     }
 
@@ -325,7 +331,7 @@ public class Client {
     }
 
     // TODO: Two functions below might be redundant
-    public static byte[] readFile(String path) {
+    public byte[] readFile(String path) {
         byte[] buf = new byte[0];
         try {
             BufferedInputStream stream = new BufferedInputStream(new FileInputStream(path));
@@ -336,7 +342,7 @@ public class Client {
             int i = stream.read(buf);
 
             for (byte d : buf) {
-                System.out.println((char) d + ":" + d);
+                //System.out.println((char) d + ":" + d);
             }
 
         } catch (IOException e) {
@@ -346,7 +352,7 @@ public class Client {
         return buf;
     }
 
-    public static void writeFile(byte[] data, String path) {
+    public void writeFile(byte[] data, String path) {
         try(OutputStream os = new FileOutputStream(path)){
             for (byte b : data) {
                 os.write(b);
